@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Relay</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap">
+<style>
+/* Layout: one narrow column. Organizer view = form, then one link card per sender. Sender view = message preview, progress, contact rows with one big button each. */
+:root {
+  --bg: #f3f6f4;
+  --surface: #ffffff;
+  --fg: #14201b;
+  --muted: #5d6e66;
+  --line: #d6e0da;
+  --accent: #0f7a55;
+  --accent-fg: #ffffff;
+  --accent-soft: #dff3ea;
+  --warn: #a15c00;
+  --warn-soft: #fdf0d9;
+  --bad: #b3261e;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "DM Sans", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1713; --surface: #16231d; --fg: #e6f0ea; --muted: #8fa398; --line: #2a3b33;
+    --accent: #3fc58f; --accent-fg: #06180f; --accent-soft: #173a2b; --warn: #f0b95a; --warn-soft: #3a2c10; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1713; --surface: #16231d; --fg: #e6f0ea; --muted: #8fa398; --line: #2a3b33;
+  --accent: #3fc58f; --accent-fg: #06180f; --accent-soft: #173a2b; --warn: #f0b95a; --warn-soft: #3a2c10; --bad: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.2rem; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 60ch; }
+.eyebrow { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+label { font-weight: 500; font-size: .9rem; display: flex; flex-direction: column; gap: 6px; }
+.hint { color: var(--muted); font-weight: 400; font-size: .82rem; }
+input, textarea {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; min-height: 120px; line-height: 1.45; }
+input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 460px) { .row { grid-template-columns: 1fr; } }
+.btn {
+  font: inherit; font-weight: 700; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 8px; padding: 12px 18px; cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center; text-align: center;
+}
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.btn.small { padding: 8px 12px; font-size: .88rem; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.sample { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: .86rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.sample button { font: inherit; font-weight: 700; background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+.report { font-size: .88rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.report .bad { color: var(--bad); }
+.batch { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.batch-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.batch-head strong { font-family: var(--font-display); font-size: 1.05rem; }
+.batch-head span { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.linkbox { display: flex; gap: 8px; }
+.linkbox input { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; }
+.note { font-size: .86rem; color: var(--muted); }
+.note b { color: var(--fg); }
+.preview { background: var(--accent-soft); border-radius: 10px; padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .25s; }
+.progress { display: flex; justify-content: space-between; font-size: .88rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list { display: flex; flex-direction: column; gap: 10px; }
+.contact { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.contact .who { min-width: 0; }
+.contact .name { font-weight: 700; overflow-wrap: anywhere; }
+.contact .num { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.contact.done { background: var(--bg); }
+.contact.done .name { color: var(--muted); }
+.contact .btn { flex-shrink: 0; min-width: 118px; }
+.contact.done .btn { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+.err { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+(function () {
+  var app = document.getElementById("app");
+  var SAMPLE_CONTACTS = "Asha Patil, 9000000001\nRahul Deshmukh, 9000000002\nMeera Joshi, 9000000003";
+  var SAMPLE_MESSAGE = "Hi {name}, we are starting a new community group. Join us here: https://example.com/join";
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "class") n.className = attrs[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+
+  /* token = "z" + url-safe base64 of deflated JSON (or "p" + plain when compression is missing). It lives after the # so it never reaches the server. */
+  function b64u(bytes) { var s = ""; bytes.forEach(function (b) { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+  function unb64u(t) { var b = t.replace(/-/g, "+").replace(/_/g, "/"); while (b.length % 4) b += "="; var s = atob(b), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  async function pipe(bytes, stream) { var w = stream.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(stream.readable).arrayBuffer()); }
+  async function encode(obj) {
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream === "function") { try { return "z" + b64u(await pipe(bytes, new CompressionStream("deflate-raw"))); } catch (e) {} }
+    return "p" + b64u(bytes);
+  }
+  async function decode(tok) {
+    var bytes = unb64u(tok.slice(1));
+    if (tok.charAt(0) === "z") bytes = await pipe(bytes, new DecompressionStream("deflate-raw"));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  function normalizeNumber(raw, cc) {
+    var plus = /^\s*\+/.test(raw), d = raw.replace(/\D/g, "");
+    if (!d) return null;
+    if (!plus) {
+      if (d.length === 10) d = cc + d;
+      else if (d.length === 11 && d.charAt(0) === "0") d = cc + d.slice(1);
+    }
+    return d.length >= 11 && d.length <= 15 ? d : null;
+  }
+
+  function parseContacts(text, cc) {
+    var good = [], bad = [], seen = {}, dupes = 0;
+    text.split(/\r?\n/).forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      var m = line.match(/\+?\d[\d\s\-().]{7,}\d/);
+      if (!m) { bad.push(line); return; }
+      var num = normalizeNumber(m[0], cc);
+      var name = line.replace(m[0], "").replace(/^[\s,;|\t\-:]+|[\s,;|\t\-:]+$/g, "");
+      if (!num) { bad.push(line); return; }
+      if (seen[num]) { dupes++; return; }
+      seen[num] = 1;
+      good.push([name, num]);
+    });
+    return { good: good, bad: bad, dupes: dupes };
+  }
+
+  function split(list, parts) {
+    var out = [], base = Math.floor(list.length / parts), extra = list.length % parts, at = 0;
+    for (var i = 0; i < parts; i++) {
+      var size = base + (i < extra ? 1 : 0);
+      out.push(list.slice(at, at + size));
+      at += size;
+    }
+    return out;
+  }
+
+  function waLink(num, name, message) {
+    var first = (name || "").split(/\s+/)[0] || "there";
+    return "https://wa.me/" + num + "?text=" + encodeURIComponent(message.replace(/\{name\}/g, first));
+  }
+
+  /* ---------- Organizer ---------- */
+  function renderOrganizer() {
+    app.textContent = "";
+    var contacts = el("textarea", { id: "contacts", rows: "9", spellcheck: "false" });
+    contacts.value = SAMPLE_CONTACTS;
+    var message = el("textarea", { id: "message", rows: "4" });
+    message.value = SAMPLE_MESSAGE;
+    var cc = el("input", { id: "cc", inputmode: "numeric", value: "91" });
+    var count = el("input", { id: "count", type: "number", min: "1", max: "20", value: "4" });
+    var names = el("input", { id: "names", placeholder: "Asha, Rahul, Meera, Vikram" });
+    var out = el("div", { class: "panel", hidden: "" });
+    var sample = el("div", { class: "sample" }, [
+      el("span", { text: "Sample contacts and message are filled in. Replace them with yours." }),
+      el("button", { type: "button", text: "Clear samples", onclick: function () { contacts.value = ""; message.value = ""; sample.hidden = true; contacts.focus(); } })
+    ]);
+
+    async function generate() {
+      var parsed = parseContacts(contacts.value, cc.value.replace(/\D/g, "") || "91");
+      var msg = message.value.trim();
+      var n = Math.max(1, Math.min(20, parseInt(count.value, 10) || 4));
+      out.textContent = ""; out.hidden = false;
+      if (!parsed.good.length || !msg) {
+        out.appendChild(el("p", { class: "err", text: !parsed.good.length ? "Add at least one contact with a phone number." : "Write the message you want to send." }));
+        return;
+      }
+      var cleanBase = location.href.split("#")[0];
+      var senderNames = names.value.split(",").map(function (s) { return s.trim(); });
+      var parts = split(parsed.good, n);
+
+      var rep = el("div", { class: "report" }, [
+        el("span", { text: parsed.good.length + " valid numbers split into " + n + " batches." }),
+        parsed.dupes ? el("span", { text: parsed.dupes + " duplicate number(s) removed." }) : null,
+        parsed.bad.length ? el("span", { class: "bad", text: parsed.bad.length + " line(s) skipped, no valid number: " + parsed.bad.slice(0, 3).join(" | ") + (parsed.bad.length > 3 ? " …" : "") }) : null
+      ]);
+      out.appendChild(el("h2", { text: "Your " + n + " links" }));
+      out.appendChild(rep);
+
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        var label = senderNames[i] || ("Sender " + (i + 1));
+        var tok = await encode({ m: msg, s: label, i: i + 1, n: n, c: part });
+        var full = cleanBase + "#" + tok;
+        (function (label, part, full) {
+        var box = el("input", { readonly: "", value: full, "aria-label": "Link for " + label });
+        var copy = el("button", { type: "button", class: "btn small", text: "Copy" });
+        copy.addEventListener("click", function () {
+          box.focus(); box.select();
+          var done = function () { copy.textContent = "Copied"; setTimeout(function () { copy.textContent = "Copy"; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(full).then(done, function () { copy.textContent = "Press Ctrl+C"; });
+          else copy.textContent = "Press Ctrl+C";
+        });
+        out.appendChild(el("div", { class: "batch" }, [
+          el("div", { class: "batch-head" }, [el("strong", { text: label }), el("span", { text: part.length + " contacts" })]),
+          el("div", { class: "linkbox" }, [box, copy])
+        ]));
+        })(label, part, full);
+      }
+      out.appendChild(el("p", { class: "note", text: "Send each person their own link. They open it on their phone, tap a contact, WhatsApp opens with the message filled in, and they press send. The message goes from their own number." }));
+      out.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    app.appendChild(el("header", { style: "display:flex;flex-direction:column;gap:8px" }, [
+      el("div", { class: "eyebrow", text: "WhatsApp campaign" }),
+      el("h1", { text: "WhatsApp Relay" }),
+      el("p", { class: "lede", text: "Paste your contact list and message. Get one link per sender. Each sender sends only their share, from their own phone." })
+    ]));
+    app.appendChild(el("div", { class: "panel" }, [
+      sample,
+      el("label", { for: "contacts" }, ["Contacts", el("span", { class: "hint", text: "One per line: Name, number. Numbers without a country code get the one below." }), contacts]),
+      el("label", { for: "message" }, ["Message", el("span", { class: "hint", text: "Write {name} where you want each person's first name." }), message]),
+      el("div", { class: "row" }, [
+        el("label", { for: "count" }, ["Number of senders", count]),
+        el("label", { for: "cc" }, ["Default country code", cc])
+      ]),
+      el("label", { for: "names" }, ["Sender names (optional)", el("span", { class: "hint", text: "Comma separated, in order. Used as the label on each batch." }), names]),
+            el("div", { class: "actions" }, [el("button", { type: "button", class: "btn", text: "Create links", onclick: generate })])
+    ]));
+    app.appendChild(out);
+  }
+
+  /* ---------- Sender ---------- */
+  function renderSender(data, tok) {
+    app.textContent = "";
+    var key = "wr:done:" + tok.slice(-48) + tok.length;
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
+    function save() { try { localStorage.setItem(key, JSON.stringify(done)); } catch (e) {} }
+
+    var fill = el("i"), prog = el("span"), total = data.c.length;
+    function refresh() {
+      var n = Object.keys(done).length;
+      prog.textContent = n + " of " + total + " opened";
+      fill.style.width = (total ? (n / total * 100) : 0) + "%";
+    }
+
+    var list = el("div", { class: "list" });
+    data.c.forEach(function (c) {
+      var num = c[1], name = c[0];
+      var btn = el("a", { class: "btn", href: waLink(num, name, data.m), target: "_blank", rel: "noopener noreferrer", text: done[num] ? "Open again" : "Send" });
+      var row = el("div", { class: "contact" + (done[num] ? " done" : "") }, [
+        el("div", { class: "who" }, [el("div", { class: "name", text: name || "No name" }), el("div", { class: "num", text: "+" + num })]),
+        btn
+      ]);
+      btn.addEventListener("click", function () {
+        done[num] = 1; save(); row.className = "contact done"; btn.textContent = "Open again"; refresh();
+      });
+      list.appendChild(row);
+    });
+
+    app.appendChild(el("header", { style: "display:flex;flex-direction:column;gap:8px" }, [
+      el("div", { class: "eyebrow", text: "Batch " + data.i + " of " + data.n + " · " + data.s }),
+      el("h1", { text: total + " people to message" }),
+      el("p", { class: "lede", text: "Tap Send next to a name. WhatsApp opens with the message ready. Press send in WhatsApp, then come back here for the next one." })
+    ]));
+    app.appendChild(el("div", { class: "panel" }, [
+      el("div", { class: "eyebrow", text: "Message" }),
+      el("div", { class: "preview", text: data.m.replace(/\{name\}/g, "Name") })
+    ]));
+    app.appendChild(el("div", { style: "display:flex;flex-direction:column;gap:8px" }, [
+      el("div", { class: "progress" }, [prog, el("span", { text: "Opened means you tapped Send, not that WhatsApp confirmed it" })]),
+      el("div", { class: "bar" }, [fill])
+    ]));
+    app.appendChild(list);
+    refresh();
+  }
+
+  async function route() {
+    var tok = (location.hash || "").replace(/^#/, "");
+    if (tok.length > 24) {
+      try { renderSender(await decode(tok), tok); return; } catch (e) {
+        app.textContent = "";
+        app.appendChild(el("h1", { text: "This link is incomplete" }));
+        app.appendChild(el("p", { class: "lede err", text: "Ask the person who sent it to share the full link again." }));
+        return;
+      }
+    }
+    renderOrganizer();
+  }
+  window.addEventListener("hashchange", route);
+  route();
+})();
+</script>
+
+</body>
+</html>
